@@ -1,3 +1,5 @@
+import json
+
 from kombu import Connection, Exchange
 from config import MONGODB_CONNECTION
 
@@ -11,3 +13,11 @@ class Base:
     @property
     def connection(self):
         return self._connection
+
+
+class TaskBase:
+    def jsonify(self):
+        return json.dumps(self.__dict__)
+
+    def dumps(self):
+        return self.__dict__

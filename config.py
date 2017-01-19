@@ -14,23 +14,18 @@ SUBTASK_PROCESSING = "processing"
 SUBTASK_SUCCEED = "succeed"
 SUBTASK_FAILED = "failed"
 
-STATEMACHINE = {
-    "wake": {
-        "sleep": ["TASK_EAT", "TASK_WASH", "TASK_SLEEP"]
-    },
-    "hungry": {
-        "full": ["TASK_EAT"]
-    }
+# ##### deps resolver
+from resolvers.eat import eat
+from resolvers.sleep import sleep
+RESOLVER_MAPPER = {
+    "eat": eat,
+    "sleep": sleep,
 }
 
-SUBTASK_DEPS = {
-    "TASK_EAT": ["TASK_SLEEP"],
-    "TASK_WASH": ["TASK_SLEEP"],
-    "TASK_SLEEP": [],
-}
 
-SUBTASK_HANDLER = {
-    "TASK_EAT": lambda: print("executing TASK_EAT..."),
-    "TASK_WASH": lambda: print("executing TASK_WASH..."),
-    "TASK_SLEEP": lambda: print("executing TASK_SLEEP..."),
+# #### handlers
+from handlers.say_hi import say_hi
+
+RESOURCE_HANDLERS_MAPPER = {
+    "say_hi": say_hi,
 }

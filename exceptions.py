@@ -1,4 +1,4 @@
-class WorkersNotSpecified(Exception):
+class WorkerNotSpecified(Exception):
     pass
 
 
@@ -7,4 +7,8 @@ class ResourcesError(Exception):
 
 
 class DAGCycleError(Exception):
+    pass
+
+
+class SubTaskFailed(Exception):
     pass

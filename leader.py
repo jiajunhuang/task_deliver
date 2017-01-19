@@ -1,13 +1,19 @@
 import time
 import logging
-from collections import defaultdict
 
 from kombu import Producer
 from base import Base
 from utils import Singleton, get_uuid
-from config import TASK_PREPARING, SUBTASK_PREPARE
-from exceptions import WorkersNotSpecified, ResourcesError
+from exceptions import WorkerNotSpecified, ResourcesError, SubTaskFailed
 from dag import DAG
+from config import (
+    TASK_PREPARING,
+    TASK_FAILED,
+    TASK_SUCCEED,
+    SUBTASK_PREPARE,
+    SUBTASK_FAILED,
+    RESOLVER_MAPPER,
+)
 
 
 class Leader(Base, metaclass=Singleton):
@@ -17,22 +23,34 @@ class Leader(Base, metaclass=Singleton):
             self.connection,
             exchange=self.task_exchange
         )
-        self.resource_handlers = {}
-
-    def add_handler(self, resource_type, handler):
-        if resource_type in self.resource_handlers:
-            logging.warning(
-                "updating handler of resource type: %s" % resource_type
-            )
-        self.resource_handlers[resource_type] = handler
-
-    def split(self, task):
-        subtasks = self.subtaskfy(task)
-        raise NotImplemented()
 
     def publish(self, task):
-        for worker in task["workers"]:
-            self.producer.publish(task, routing_key=worker)
+        self.resolve_deps(task)
+        self.subtaskfy(task)
+        try:
+            next_subtask = self.next_subtask(task)
+            logging.debug("next subtask: %s" % next_subtask)
+            if next_subtask is None:
+                self.update_task_status(TASK_SUCCEED, "")
+            else:
+                self.producer.publish(next_subtask, routing_key=task["worker"])
+        except SubTaskFailed:
+            logging.error("subtask in worker %s had failed")
+            self.update_task_status(
+                TASK_FAILED, "task failed due to subtask"
+            )
+
+    def update_task_status(self, task, status, description):
+        task["status"], task["description"] = status, description
+
+    def next_subtask(self, task):
+        subtasks = task["subtasks"]
+        for subtask in subtasks:
+            if subtask["status"] == SUBTASK_PREPARE:
+                return subtask
+            elif subtask["status"] == SUBTASK_FAILED:
+                raise SubTaskFailed()
+        return None
 
     def subtaskfy(self, task):
         """
@@ -53,21 +71,26 @@ class Leader(Base, metaclass=Singleton):
                 dag.add_edge(u)
         for type in dag.topo_sort():
             subtasks.append({
-                'type': type,
-                'status': SUBTASK_PREPARE,
+                "type": type,
+                "status": SUBTASK_PREPARE,
             })
         task["subtasks"] = subtasks
+
+    def resolve_deps(self, task):
+        deps = {}
+        for resource in task["resources"]:
+            deps.update(RESOLVER_MAPPER[resource["type"]](task))
+        task["deps"] = deps
 
 
 def task_deliver(
         resources,
-        workers,
-        deps,
+        worker,
         task_id=None,
         description="",
 ):
-    if not workers:
-        raise WorkersNotSpecified()
+    if not worker:
+        raise WorkerNotSpecified()
 
     if not isinstance(resources, list):
         raise ResourcesError("resources should be a list")
@@ -77,23 +100,17 @@ def task_deliver(
         "description": description,
         "ctime": time.time(),
         "status": TASK_PREPARING,
-        "workers": workers,
+        "worker": worker,
         "resources": resources,
-        "deps": deps,
     }
 
     leader = Leader()
-    leader.split(task)
     leader.publish(task)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
     leader = Leader()
-
-    def handler(*args, **kwargs):
-        return []
-
-    leader.add_handler("sayhi", handler)
 
     while True:
         resources = [
@@ -106,9 +123,5 @@ if __name__ == "__main__":
                 "type": "eat",
             }
         ]
-        deps = {
-            "eat": ["sleep"],
-            "sleep": [],
-        }
-        task_deliver(resources, ["worker1"], deps)
+        task_deliver(resources, "worker1")
         time.sleep(3)

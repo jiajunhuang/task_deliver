@@ -1,12 +1,13 @@
 from base import Base
 from kombu import Consumer, Queue
+from utils import Singleton
 
 
-class Worker(Base):
-    def __init__(self):
+class Worker(Base, metaclass=Singleton):
+    def __init__(self, worker_name, routing_key):
         super().__init__()
         self.task_queue = Queue(
-            'consumer1', self.task_exchange, routing_key='consumer1'
+            worker_name, self.task_exchange, routing_key=routing_key
         )
         self._consumer = Consumer(
             self.connection,
@@ -24,5 +25,5 @@ class Worker(Base):
 
 
 if __name__ == "__main__":
-    worker = Worker()
+    worker = Worker('worker1', 'worker1')
     worker.consume()

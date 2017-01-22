@@ -1,5 +1,6 @@
 import time
 import logging
+import copy
 
 from kombu import Producer
 from base import Base
@@ -10,7 +11,9 @@ from config import (
     TASK_PREPARING,
     TASK_FAILED,
     TASK_SUCCEED,
+    TASK_PROCESSING,
     SUBTASK_PREPARE,
+    SUBTASK_PROCESSING,
     SUBTASK_FAILED,
     RESOLVER_MAPPER,
 )
@@ -33,7 +36,15 @@ class Leader(Base, metaclass=Singleton):
             if next_subtask is None:
                 self.update_task_status(TASK_SUCCEED, "")
             else:
-                self.producer.publish(next_subtask, routing_key=task["worker"])
+                subtask_to_exec = copy.deepcopy(next_subtask)
+                subtask_to_exec["task_id"] = task["task_id"]
+                self.producer.publish(
+                    subtask_to_exec, routing_key=task["worker"]
+                )
+                self.update_task_status(task, TASK_PROCESSING, "")
+                self.update_subtask_status(
+                    task, next_subtask, SUBTASK_PROCESSING, ""
+                )
         except SubTaskFailed:
             logging.error("subtask in worker %s had failed")
             self.update_task_status(

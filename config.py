@@ -26,6 +26,6 @@ RESOLVER_MAPPER = {
 # #### handlers
 from handlers.say_hi import say_hi
 
-RESOURCE_HANDLERS_MAPPER = {
+HANDLERS_MAPPER = {
     "say_hi": say_hi,
 }
